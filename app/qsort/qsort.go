@@ -2,9 +2,6 @@
 // for using modules).
 package qsort
 
-import "github.com/google/btree"
-
 func Sort(xs []int) int {
-	tree := btree.New(2)
-	return tree.Len() + len(xs)
+	return len(xs)
 }
