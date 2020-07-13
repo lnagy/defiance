@@ -1,7 +1,6 @@
 package main
 
 import (
-	"app/qsort"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,7 +8,6 @@ import (
 )
 
 func main() {
-	fmt.Printf("%v", qsort.Sort([]int{}))
 	serverURL := os.Args[1]
 	playerKey := os.Args[2]
 
