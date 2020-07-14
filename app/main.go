@@ -25,5 +25,7 @@ func main() {
 
 	if res.StatusCode != http.StatusOK {
 		log.Fatalf("Failed: got status %d, want %d", res.StatusCode, http.StatusOK)
+	} else {
+		fmt.Println("Yay!")
 	}
 }
