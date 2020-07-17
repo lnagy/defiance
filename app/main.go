@@ -2,9 +2,11 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -13,19 +15,28 @@ func main() {
 
 	fmt.Printf("ServerUrl: %s; PlayerKey: %s\n", serverURL, playerKey)
 
-	res, err := http.Get(fmt.Sprintf("%s?playerKey=%s", serverURL, playerKey))
+	res, err := http.Post(serverURL, "text/plain", strings.NewReader(playerKey))
 	if err != nil {
-		log.Fatalf("Failed: %v", err)
+		log.Printf("Unexpected server response:\n%v", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if res := res.Body.Close(); res != nil {
 			log.Printf("Error closing connection: %v", res)
 		}
 	}()
+	body, err := ioutil.ReadAll(res.Body)
+	if err != nil {
+		log.Printf("Unexpected server response:\n%v", err)
+		os.Exit(1)
+	}
 
 	if res.StatusCode != http.StatusOK {
-		log.Fatalf("Failed: got status %d, want %d", res.StatusCode, http.StatusOK)
-	} else {
-		fmt.Println("Yay!")
+		log.Printf("Unexpected server response:")
+		log.Printf("HTTP code: %d", res.StatusCode)
+		log.Printf("Response body: %s", body)
+		os.Exit(2)
 	}
+
+	log.Printf("Server response: %s", body)
 }
