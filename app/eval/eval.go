@@ -162,7 +162,7 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 		return nil, errors.New(fmt.Sprintf("expected function node: %v", n))
 	}
 	if len(n.nodes) != 1 {
-		return nil, errors.New(fmt.Sprintf("unary function expects exactly one arg: %v", n))
+		return nil, errors.New(fmt.Sprintf("function node expects exactly one arg: %v", n))
 	}
 	// Shortcutting functions.
 	switch n.fun.funName {
@@ -171,24 +171,34 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	case "f": // First argument ignored.
 		n.nodes[0] = &Node{nodeType: Fun, funName: "_"}
 	default:
-		if arg, err := r.Reduce(n.nodes[0]); err != nil {
-			return nil, err
-		} else {
-			if n.nodes[0] != arg {
-				n.nodes[0] = arg
-				r.RecordStep()
+		for {
+			if arg, err := r.Reduce(n.nodes[0]); err != nil {
+				return nil, err
+			} else {
+				if n.nodes[0] != arg {
+					n.nodes[0] = arg
+					r.RecordStep()
+				} else {
+					break
+				}
 			}
 		}
-
 	}
 	switch n.fun.funName {
 	case "nil":
 		return &Node{nodeType: Fun, funName: "t"}, nil
-	case "neg":
+	case "neg", "inc", "dec":
 		if n.nodes[0].nodeType != Num {
 			return nil, errors.New(fmt.Sprintf("expected single numeric argument: %v", n))
 		} else {
-			return &Node{nodeType: Num, num: -n.nodes[0].num}, nil
+			switch n.fun.funName {
+			case "neg":
+				return &Node{nodeType: Num, num: -n.nodes[0].num}, nil
+			case "inc":
+				return &Node{nodeType: Num, num: n.nodes[0].num + 1}, nil
+			case "dec":
+				return &Node{nodeType: Num, num: n.nodes[0].num - 1}, nil
+			}
 		}
 	case "isnil":
 		if n.nodes[0].funName == "nil" {
@@ -226,22 +236,33 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 			r.lambdas += 1
 			return &Node{nodeType: Lambda, fun: node, bound: &node.nodes[1]}, nil
 		}
+	case "s", "c", "b":
+		{
+			closure := &Node{nodeType: Closure, funName: n.fun.funName}
+			closure.nodes = append(closure.nodes, n.nodes[0])
+			closure.nodes = append(closure.nodes, &Node{nodeType: Fun, funName: fmt.Sprint("X", r.lambdas)})
+			r.lambdas += 1
+			closure.nodes = append(closure.nodes, &Node{nodeType: Fun, funName: fmt.Sprint("X", r.lambdas)})
+			r.lambdas += 1
+			return &Node{nodeType: Lambda, fun: &Node{nodeType: Lambda, fun: closure, bound: &closure.nodes[2]},
+				bound: &closure.nodes[1]}, nil
+		}
 	case "root", "i":
 		return n.nodes[0], nil
-
 	default:
 		return nil, errors.New(fmt.Sprintf("unimplemented function: %v", n))
 	}
+	return nil, errors.New(fmt.Sprintf("unreachable: %v", n))
 }
 
 func (r *Reducer) Reduce(n *Node) (*Node, error) {
-	// log.Printf("Reducing: %v", n)
+	//log.Printf("Reducing: %v", n)
 	if n == nil {
 		return nil, nil
 	}
 	r.stepCount += 1
 	switch n.nodeType {
-	case Num, Fun, Cons:
+	case Num, Fun, Cons, Lambda:
 		return n, nil
 	case Ap:
 		switch {
@@ -251,11 +272,11 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 			if fun, err := r.Reduce(n.fun); err != nil {
 				return nil, err
 			} else {
+				if fun == nil {
+					return nil, errors.New(fmt.Sprintf("'fun' reduction is nil: %v", n))
+				}
 				n.fun = fun
 				r.RecordStep()
-				if n.fun == nil {
-					return nil, errors.New(fmt.Sprintf("fun is nil: %v", n))
-				}
 				return r.Reduce(n)
 			}
 		case n.fun.nodeType == Lambda:
@@ -287,16 +308,16 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 		}
 	case Closure:
 		{
-			for pos, node := range n.nodes {
-				if arg, err := r.Reduce(node); err != nil {
-					return nil, err
-				} else {
-					if n.nodes[pos] != arg {
-						n.nodes[pos] = arg
-						r.RecordStep()
-					}
-				}
-			}
+			//for pos, node := range n.nodes {
+			//	if arg, err := r.Reduce(node); err != nil {
+			//		return nil, err
+			//	} else {
+			//		if n.nodes[pos] != arg {
+			//			n.nodes[pos] = arg
+			//			r.RecordStep()
+			//		}
+			//	}
+			//}
 			switch n.funName {
 			case "add", "mul", "div", "eq", "lt":
 				{
@@ -328,8 +349,17 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 				return n.nodes[0], nil
 			case "f":
 				return n.nodes[1], nil
+			case "s":
+				return &Node{nodeType: Ap, fun: &Node{nodeType: Ap, fun: n.nodes[0], nodes: []*Node{n.nodes[2]}},
+					nodes: []*Node{{nodeType: Ap, fun: n.nodes[1], nodes: []*Node{n.nodes[2]}}}}, nil
+			case "c":
+				return &Node{nodeType: Ap, fun: &Node{nodeType: Ap, fun: n.nodes[0], nodes: []*Node{n.nodes[2]}},
+					nodes: []*Node{n.nodes[1]}}, nil
+			case "b":
+				return &Node{nodeType: Ap, fun: n.nodes[0],
+					nodes: []*Node{{nodeType: Ap, fun: n.nodes[1], nodes: []*Node{n.nodes[2]}}}}, nil
 			}
 		}
 	}
-	return nil, nil
+	return nil, errors.New(fmt.Sprintf("unimplemented: %v", n))
 }

@@ -53,8 +53,19 @@ func TestEval(t *testing.T) {
 		{":1 = ap car ap ap cons 2 ap ap cons 5 nil", true, "2"},
 		// Test 18
 		{":1 = ap cdr ap ap cons 2 ap ap cons 5 nil", true, "[ 5 :: nil ]"},
+		// Test 19
+		{":1 = ap ap ap s add inc 1", true, "3"},
+		// Test 20
+		{":1 = ap ap ap s mul ap add 1 6", true, "42"},
+		// Test 21
+		{":1 = ap ap ap c add 1 2", true, "3"},
+		// Test 22
+		{":1 = ap ap ap b inc dec 7", true, "7"},
 	}
 	for testId, test := range tests {
+		//if testId != 19 {
+		//	continue
+		//}
 		var parser Parser
 		node, err := parser.Parse(test.expressions)
 		correct := err == nil
