@@ -268,14 +268,26 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 			r.lambdas += 1
 			return &Node{nodeType: Lambda, fun: node, bound: &node.nodes[1]}, nil
 		}
-	case "s", "c", "b":
+	case "s", "c", "b", "if0":
 		{
 			closure := &Node{nodeType: Closure, funName: n.fun.funName}
 			closure.nodes = append(closure.nodes, n.nodes[0])
-			closure.nodes = append(closure.nodes, &Node{nodeType: Fun, funName: fmt.Sprint("X", r.lambdas)})
+			firstArg := fmt.Sprint("X", r.lambdas)
 			r.lambdas += 1
-			closure.nodes = append(closure.nodes, &Node{nodeType: Fun, funName: fmt.Sprint("X", r.lambdas)})
+			secondArg := fmt.Sprint("X", r.lambdas)
 			r.lambdas += 1
+			if n.fun.funName == "if0" {
+				if n.nodes[0].nodeType != Num {
+					return nil, errors.New(fmt.Sprintf("'if0' expects numeric first argument: %v", n))
+				}
+				if n.nodes[0].num == 0 {
+					secondArg = "_"
+				} else {
+					firstArg = "_"
+				}
+			}
+			closure.nodes = append(closure.nodes, &Node{nodeType: Fun, funName: firstArg})
+			closure.nodes = append(closure.nodes, &Node{nodeType: Fun, funName: secondArg})
 			return &Node{nodeType: Lambda, fun: &Node{nodeType: Lambda, fun: closure, bound: &closure.nodes[2]},
 				bound: &closure.nodes[1]}, nil
 		}
@@ -382,6 +394,12 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 							return &Node{nodeType: Fun, funName: "f"}, nil
 						}
 					}
+				}
+			case "if0":
+				if n.nodes[0].num == 0 {
+					return n.nodes[1], nil
+				} else {
+					return n.nodes[2], nil
 				}
 			case "t":
 				return n.nodes[0], nil

@@ -79,6 +79,12 @@ func TestEval(t *testing.T) {
 		{":1 = ap ap ap b inc dec 7", true, "7"},
 		// Test 23
 		{":1 = ap ap add 7 :2\n:2 = -3\n:3 = :1", true, "4"},
+		// Test 24
+		{":1 = ap ap ap if0 0 3 7", true, "3"},
+		// Test 25
+		{":1 = ap ap ap if0 1 3 7", true, "7"},
+		// Test 26
+		{":1 = ap ap ap if0 ap dec 1 3 ap dec t", true, "3"},
 	}
 	for testId, test := range tests {
 		//if testId != 19 {
