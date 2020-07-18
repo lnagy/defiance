@@ -49,6 +49,10 @@ func TestEval(t *testing.T) {
 		{":1 = ap ap t t ap ap add 2 5", true, "t"},
 		// Test 16
 		{":1 = ap ap f t ap ap add 2 5", true, "7"},
+		// Test 17
+		{":1 = ap car ap ap cons 2 ap ap cons 5 nil", true, "2"},
+		// Test 18
+		{":1 = ap cdr ap ap cons 2 ap ap cons 5 nil", true, "[ 5 :: nil ]"},
 	}
 	for testId, test := range tests {
 		var parser Parser

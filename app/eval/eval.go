@@ -185,20 +185,28 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	case "nil":
 		return &Node{nodeType: Fun, funName: "t"}, nil
 	case "neg":
-		{
-			if n.nodes[0].nodeType != Num {
-				return nil, errors.New(fmt.Sprintf("expected single numeric argument: %v", n))
-			} else {
-				return &Node{nodeType: Num, num: -n.nodes[0].num}, nil
-			}
+		if n.nodes[0].nodeType != Num {
+			return nil, errors.New(fmt.Sprintf("expected single numeric argument: %v", n))
+		} else {
+			return &Node{nodeType: Num, num: -n.nodes[0].num}, nil
 		}
 	case "isnil":
-		{
-			if n.nodes[0].funName == "nil" {
-				return &Node{nodeType: Fun, funName: "t"}, nil
-			} else {
-				return &Node{nodeType: Fun, funName: "f"}, nil
-			}
+		if n.nodes[0].funName == "nil" {
+			return &Node{nodeType: Fun, funName: "t"}, nil
+		} else {
+			return &Node{nodeType: Fun, funName: "f"}, nil
+		}
+	case "car":
+		if n.nodes[0].nodeType != Cons {
+			return nil, errors.New(fmt.Sprintf("'car' expects CONS: %v", n))
+		} else {
+			return n.nodes[0].nodes[0], nil
+		}
+	case "cdr":
+		if n.nodes[0].nodeType != Cons {
+			return nil, errors.New(fmt.Sprintf("'cdr' expects CONS: %v", n))
+		} else {
+			return n.nodes[0].nodes[1], nil
 		}
 	case "cons", "mul", "div", "add", "eq", "lt", "t", "f":
 		{
