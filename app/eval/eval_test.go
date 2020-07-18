@@ -6,6 +6,22 @@ import (
 	"testing"
 )
 
+func TestClone(t *testing.T) {
+	var parser Parser
+	node, err := parser.Parse(":1 = ap ap cons 7 ap ap cons 123229502148636 nil")
+	if err != nil {
+		t.Fail()
+	} else {
+		clone := node.Clone()
+		if fmt.Sprint(node) != fmt.Sprint(clone) {
+			t.Errorf("Clone() failed. expected: %v, got: %v", node, clone)
+		}
+		if clone == node {
+			t.Errorf("Clone() failed. pointer unchanged")
+		}
+	}
+}
+
 func TestEval(t *testing.T) {
 	tests := []struct {
 		expressions string
@@ -61,6 +77,8 @@ func TestEval(t *testing.T) {
 		{":1 = ap ap ap c add 1 2", true, "3"},
 		// Test 22
 		{":1 = ap ap ap b inc dec 7", true, "7"},
+		// Test 23
+		{":1 = ap ap add 7 :2\n:2 = -3\n:3 = :1", true, "4"},
 	}
 	for testId, test := range tests {
 		//if testId != 19 {
@@ -80,8 +98,8 @@ func TestEval(t *testing.T) {
 			failed = true
 		}
 		if node != nil {
-			reducer := NewReducer(node, true)
-			result, reduceErr := reducer.Reduce(reducer.root)
+			reducer := parser.NewReducer(node, true)
+			result, reduceErr := reducer.Reduce(reducer.Root)
 			if reduceErr != nil {
 				t.Logf("Test %v:\n%v\n====\n%v", testId, test.expressions, node)
 				t.Logf("Test %v: Reduction Steps (calls: %v):\n%v", testId, reducer.stepCount, strings.Join(reducer.steps, "\n"))

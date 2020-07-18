@@ -1,6 +1,8 @@
 package main
 
 import (
+	"app/eval"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -10,6 +12,43 @@ import (
 )
 
 func main() {
+	inputFile := flag.String("input_file", "",
+		"Filename to parse expressions from.")
+	evaluateId := flag.String("evaluate", "",
+		"Name of the expression to evaluate.")
+	flag.Parse()
+
+	if len(*inputFile) > 0 {
+		bytes, err := ioutil.ReadFile(*inputFile)
+		if err != nil {
+			log.Fatalln("Failed to read file: ", *inputFile, "  error: ", err)
+		}
+		contents := string(bytes)
+		parser := eval.Parser{}
+		if _, err := parser.Parse(contents); err != nil {
+			log.Fatalln("Failed to parse file: ", *inputFile, "  error: ", err)
+		}
+		_, ioErr := fmt.Fprintf(os.Stderr, "Parse finished. Variables: %v  Nodes: %v  Recursive Definitions: %v\n",
+			len(parser.Vars), parser.NodeCount, parser.RecursiveCount)
+		if ioErr != nil {
+			// Do nothing.
+		}
+		if len(*evaluateId) > 0 {
+			node, ok := parser.Vars[*evaluateId]
+			if !ok {
+				log.Fatalf("Unknown variable: '%v'\n", *evaluateId)
+			}
+			reducer := parser.NewReducer(node, false)
+			reducer.PrintSteps = true
+			result, err := reducer.Reduce(reducer.Root)
+			if err != nil {
+				log.Fatalf("Failed to reduce expression '%v'. Error: %v", *evaluateId, err)
+			}
+			fmt.Println(result)
+		}
+		return
+	}
+
 	serverURL := os.Args[1]
 	playerKey := os.Args[2]
 

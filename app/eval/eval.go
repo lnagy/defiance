@@ -3,6 +3,8 @@ package eval
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -16,6 +18,7 @@ const (
 	Num
 	Cons
 	Closure
+	Ref
 )
 
 type Node struct {
@@ -27,11 +30,27 @@ type Node struct {
 	bound    **Node // Lambda-bound.
 }
 
+func (n *Node) Clone() *Node {
+	if n == nil {
+		return nil
+	}
+	if n.bound != nil {
+		log.Fatal("Cannot clone Lambda: ", n)
+	}
+	clone := &Node{fun: n.fun.Clone(), nodeType: n.nodeType, funName: n.funName, num: n.num}
+	for _, node := range n.nodes {
+		clone.nodes = append(clone.nodes, node.Clone())
+	}
+	return clone
+}
+
 func (n *Node) String() string {
 	if n == nil {
 		return "<nil>"
 	}
 	switch n.nodeType {
+	case Ref:
+		return fmt.Sprintf("%v", n.funName)
 	case Num:
 		return fmt.Sprintf("%v", n.num)
 	case Fun:
@@ -70,7 +89,10 @@ func (n *Node) String() string {
 }
 
 type Parser struct {
-	vars map[string]*Node
+	Vars           map[string]*Node
+	parsingVar     string
+	NodeCount      int
+	RecursiveCount int // Number of recursive definitions.
 }
 
 func (p *Parser) ParseAp(tokens []string, pos int) (*Node, []string, error) {
@@ -102,13 +124,13 @@ func (p *Parser) ParseExp(tokens []string, pos int) (*Node, []string, error) {
 			return node, rem, nil
 		}
 	}
+	p.NodeCount += 1
 	if []rune(tokens[0])[0] == ':' {
-		node, ok := p.vars[tokens[0]]
-		if !ok {
-			return nil, nil, errors.New(fmt.Sprintf("token %v: unknown id: '%v'", pos, tokens[0]))
-		} else {
-			return node, tokens[1:], nil
+		if p.parsingVar == tokens[0] {
+			p.RecursiveCount += 1
+			p.parsingVar = ""
 		}
+		return &Node{nodeType: Ref, funName: tokens[0]}, tokens[1:], nil
 	}
 	if num, err := strconv.ParseInt(tokens[0], 10, 64); err == nil {
 		return &Node{nodeType: Num, num: num}, tokens[1:], nil
@@ -118,11 +140,12 @@ func (p *Parser) ParseExp(tokens []string, pos int) (*Node, []string, error) {
 }
 
 func (p *Parser) Parse(exp string) (*Node, error) {
-	p.vars = make(map[string]*Node)
+	p.Vars = make(map[string]*Node)
 	lines := strings.Split(exp, "\n")
 	var lastNode *Node
 	for row, line := range lines {
 		tokens := strings.Split(line, " ")
+		p.parsingVar = tokens[0]
 		node, rem, err := p.ParseExp(tokens[2:], 2)
 		if err != nil {
 			return nil, errors.New(fmt.Sprintf("line %v: %v", row+1, err))
@@ -130,30 +153,39 @@ func (p *Parser) Parse(exp string) (*Node, error) {
 		if len(rem) > 0 {
 			return nil, errors.New(fmt.Sprintf("line %v: unparsed leftover %v", row+1, rem))
 		}
-		p.vars[tokens[0]] = node
+		p.Vars[tokens[0]] = node
 		lastNode = node
 	}
 	return lastNode, nil
 }
 
 type Reducer struct {
-	root      *Node
-	steps     []string
-	stepCount int
-	showSteps bool
-	lambdas   int
+	Root       *Node
+	steps      []string
+	stepCount  int
+	keepSteps  bool
+	lambdas    int
+	vars       map[string]*Node
+	PrintSteps bool
 }
 
 func (r *Reducer) RecordStep() {
-	if r.showSteps {
-		r.steps = append(r.steps, fmt.Sprint(r.root))
+	if r.keepSteps {
+		r.steps = append(r.steps, fmt.Sprint(r.Root))
+	}
+	if r.PrintSteps {
+		_, err := fmt.Fprintf(os.Stderr, "-->  %v\n", r.Root)
+		if err != nil {
+			// Do nothing.
+		}
 	}
 }
 
-func NewReducer(node *Node, showSteps bool) *Reducer {
-	reducer := &Reducer{root: &Node{nodeType: Ap, fun: &Node{nodeType: Fun, funName: "root"},
-		nodes: []*Node{node}}, showSteps: showSteps}
+func (p *Parser) NewReducer(node *Node, keepSteps bool) *Reducer {
+	reducer := &Reducer{Root: &Node{nodeType: Ap, fun: &Node{nodeType: Fun, funName: "root"},
+		nodes: []*Node{node}}, keepSteps: keepSteps}
 	reducer.RecordStep()
+	reducer.vars = p.Vars
 	return reducer
 }
 
@@ -256,12 +288,18 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 }
 
 func (r *Reducer) Reduce(n *Node) (*Node, error) {
-	//log.Printf("Reducing: %v", n)
+	// log.Printf("Reducing: %v", n)
 	if n == nil {
 		return nil, nil
 	}
 	r.stepCount += 1
 	switch n.nodeType {
+	case Ref:
+		node, ok := r.vars[n.funName]
+		if !ok {
+			return nil, errors.New(fmt.Sprintf("unknown id: %v", n.funName))
+		}
+		return node.Clone(), nil
 	case Num, Fun, Cons, Lambda:
 		return n, nil
 	case Ap:
