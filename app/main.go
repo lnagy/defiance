@@ -39,8 +39,8 @@ func main() {
 				log.Fatalf("Unknown variable: '%v'\n", *evaluateId)
 			}
 			reducer := parser.NewReducer(node, false)
-			reducer.PrintSteps = true
-			result, err := reducer.Reduce(reducer.Root)
+			//reducer.PrintSteps = true
+			result, err := reducer.ReduceRoot()
 			if err != nil {
 				log.Fatalf("Failed to reduce expression '%v'. Error: %v", *evaluateId, err)
 			}

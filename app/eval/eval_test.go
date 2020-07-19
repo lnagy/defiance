@@ -6,6 +6,60 @@ import (
 	"testing"
 )
 
+func TestInstantiate(t *testing.T) {
+	tests := []struct {
+		node     *Node
+		ref      string
+		sub      *Node
+		expected string
+	}{
+		// Test 0
+		{&Node{nodeType: Ref, funName: "X0"}, "X0", &Node{nodeType: Num, num: 7}, "7"},
+		// Test 1
+		{&Node{nodeType: Ref, funName: "X0"}, "X1", &Node{nodeType: Num, num: 7}, "X0"},
+		// Test 2
+		{&Node{nodeType: Ap, fun: &Node{nodeType: Fun, funName: "neg"},
+			nodes: []*Node{{nodeType: Ref, funName: "X0"}}},
+			"X0", &Node{nodeType: Num, num: 7}, "(neg 7)"},
+		// Test 3
+		{&Node{nodeType: Closure, funName: "add",
+			nodes: []*Node{{nodeType: Num, num: 8}, {nodeType: Ref, funName: "X0"}}},
+			"X0", &Node{nodeType: Num, num: 7}, "add(8, 7)"},
+		// Test 4
+		{&Node{nodeType: Ap, fun: &Node{nodeType: Ref, funName: "X0"},
+			nodes: []*Node{{nodeType: Num, num: 8}}},
+			"X0", &Node{nodeType: Fun, funName: "inc"}, "(inc 8)"},
+	}
+	for testId, test := range tests {
+		//if testId != 7 {
+		//	continue
+		//}
+		clone := test.node.Instantiate(test.ref, test.sub)
+		if testId == 3 || testId == 4 {
+			if test.node == clone {
+				t.Fail()
+				t.Errorf("Test %v:\n%v", testId, test.node)
+				t.Errorf("Test %v: Failed to clone top node.", testId)
+			}
+			if test.node.nodes[0] != clone.nodes[0] {
+				t.Fail()
+				t.Errorf("Test %v:\n%v", testId, test.node)
+				t.Errorf("Test %v: Failed to retain unaffected branch.", testId)
+			}
+		}
+		if clone == nil {
+			t.Fail()
+			t.Errorf("Test %v:\n%v", testId, test.node)
+			t.Errorf("Test %v: Failed to instantiate.", testId)
+		} else {
+			if got := fmt.Sprint(clone); got != test.expected {
+				t.Errorf("Test %v:\n%v", testId, test.node)
+				t.Errorf("Test %v: Expected instantiation: %v, got: %v", testId, test.expected, got)
+			}
+		}
+	}
+}
+
 func TestClone(t *testing.T) {
 	var parser Parser
 	node, err := parser.Parse(":1 = ap ap cons 7 ap ap cons 123229502148636 nil")
@@ -18,6 +72,41 @@ func TestClone(t *testing.T) {
 		}
 		if clone == node {
 			t.Errorf("Clone() failed. pointer unchanged")
+		}
+	}
+}
+
+func TestNodeCount(t *testing.T) {
+	tests := []struct {
+		expressions string
+		expected    string
+		nodes       int
+	}{
+		// Test 0
+		{":1 = 7", "7", 1},
+		// Test 1
+		{":1 = ap ap cons 7 ap ap cons 123229502148636 nil",
+			"[ 7 :: [ 123229502148636 :: nil ] ]", 9},
+		// Test 2
+		{":1 = ap ap cons 7 nil", "[ 7 :: nil ]", 5},
+		// Test 3
+		{":1 = ap ap cons 7 :2\n:2 = ap ap cons 8 :1", "[ 7 :: nil ]", 5},
+	}
+	for testId, test := range tests {
+		//if testId != 7 {
+		//	continue
+		//}
+		var parser Parser
+		node, err := parser.Parse(test.expressions)
+		if err != nil {
+			t.Fail()
+			t.Errorf("Test %v:\n%v\n====\n%v", testId, test.expressions, node)
+			t.Errorf("Test %v: Failed to parse: %v", testId, err)
+		} else {
+			if got := node.NodeCount(); got != test.nodes {
+				t.Errorf("Test %v:\n%v\n====\n%v", testId, test.expressions, node)
+				t.Errorf("Test %v: Expected node count: %v, got: %v", testId, test.nodes, got)
+			}
 		}
 	}
 }
@@ -85,11 +174,25 @@ func TestEval(t *testing.T) {
 		{":1 = ap ap ap if0 1 3 7", true, "7"},
 		// Test 26
 		{":1 = ap ap ap if0 ap dec 1 3 ap dec t", true, "3"},
+		// Test 27
+		{":1141 = ap ap c b ap ap s ap ap b c ap ap b ap b b ap eq 0 ap ap b ap c :1141 ap add -1\n:1 = :1141", true,
+			"(X1.c(b, ((s ((b c) ((b (b b)) (eq 0)))) ((b (c :1141)) (add -1))), X1))"},
+		// Test 28
+		{":1 = ap ap ap cons 2 5 add", true, "7"},
+		// Test 29
+		{":1 = ap ap eq 3 ap i 7", true, "f"},
+		// Test 30
+		{":1 = ap ap eq 3 ap i 7", true, "f"},
+		// Test 31
+		{":1 = ap dec 7\n:2 = ap ap add ap inc :1 ap dec :1", true, "12"},
+		// Test 32
+		{":1 = ap ap double ap add 1 2", true, "4"},
 	}
 	for testId, test := range tests {
-		//if testId != 19 {
+		//if testId != 32 {
 		//	continue
 		//}
+		//log.Printf("==== Running Test %v", testId)
 		var parser Parser
 		node, err := parser.Parse(test.expressions)
 		correct := err == nil
@@ -104,15 +207,18 @@ func TestEval(t *testing.T) {
 			failed = true
 		}
 		if node != nil {
+			clone := node.Clone()
 			reducer := parser.NewReducer(node, true)
-			result, reduceErr := reducer.Reduce(reducer.Root)
+			reducer.MaxStepCount = 100
+			//reducer.PrintSteps = true
+			result, reduceErr := reducer.ReduceRoot()
 			if reduceErr != nil {
-				t.Logf("Test %v:\n%v\n====\n%v", testId, test.expressions, node)
+				t.Logf("Test %v:\n%v\n====\n%v", testId, test.expressions, clone)
 				t.Logf("Test %v: Reduction Steps (calls: %v):\n%v", testId, reducer.stepCount, strings.Join(reducer.steps, "\n"))
 				t.Errorf("Test %v: Failed to reduce: %v", testId, reduceErr)
 				failed = true
 			} else if fmt.Sprint(result) != test.expected {
-				t.Logf("Test %v:\n%v\n====\n%v", testId, test.expressions, node)
+				t.Logf("Test %v:\n%v\n====\n%v", testId, test.expressions, clone)
 				t.Logf("Test %v: Reduction Steps (calls: %v):\n%v", testId, reducer.stepCount, strings.Join(reducer.steps, "\n"))
 				t.Errorf("Test %v: Failed to reduce. expected: %v, got: %v", testId, test.expected, result)
 				failed = true
