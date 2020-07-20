@@ -44,7 +44,14 @@ func main() {
 			if err != nil {
 				log.Fatalf("Failed to reduce expression '%v'. Error: %v", *evaluateId, err)
 			}
-			fmt.Println(result)
+			fmt.Printf("result: %v\n", result)
+			fmt.Printf("newstate: %v\n", result.Nodes[1].Nodes[0])
+			fmt.Printf("data: %v\n", result.Nodes[1].Nodes[1].Nodes[0])
+			bytes, err := eval.ModulateList(result.Nodes[1].Nodes[1].Nodes[0], []byte{})
+			if err != nil {
+				log.Fatalf("Failed to modulate data: %v", err)
+			}
+			fmt.Printf("modulated data: %v\n", string(bytes))
 		}
 		return
 	}

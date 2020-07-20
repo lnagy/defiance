@@ -25,7 +25,7 @@ const (
 
 type Node struct {
 	fun       *Node
-	nodes     []*Node
+	Nodes     []*Node
 	nodeType  NodeType
 	funName   string
 	num       int64
@@ -38,8 +38,8 @@ func (n *Node) Clone() *Node {
 		return nil
 	}
 	clone := &Node{fun: n.fun.Clone(), nodeType: n.nodeType, funName: n.funName, num: n.num, bound: n.bound}
-	for _, node := range n.nodes {
-		clone.nodes = append(clone.nodes, node.Clone())
+	for _, node := range n.Nodes {
+		clone.Nodes = append(clone.Nodes, node.Clone())
 	}
 	return clone
 }
@@ -64,7 +64,7 @@ func (n *Node) Instantiate(ref string, sub *Node) *Node {
 			refItem = item
 			break
 		}
-		for pos, child := range item.node.nodes {
+		for pos, child := range item.node.Nodes {
 			childItem := queuedNode{node: child}
 			childItem.path = append(item.path, pos)
 			childItem.pathNodes = append(item.pathNodes, item.node)
@@ -89,11 +89,11 @@ func (n *Node) Instantiate(ref string, sub *Node) *Node {
 		childPos := path[len(path)-1]
 		parentClone := &Node{
 			nodeType: parentNode.nodeType, funName: parentNode.funName, num: parentNode.num, bound: parentNode.bound}
-		for pos, child := range parentNode.nodes {
+		for pos, child := range parentNode.Nodes {
 			if childPos == pos {
-				parentClone.nodes = append(parentClone.nodes, clone)
+				parentClone.Nodes = append(parentClone.Nodes, clone)
 			} else {
-				parentClone.nodes = append(parentClone.nodes, child)
+				parentClone.Nodes = append(parentClone.Nodes, child)
 			}
 		}
 		if childPos == -1 {
@@ -112,9 +112,9 @@ func (n *Node) Instantiate(ref string, sub *Node) *Node {
 var visited = make(map[*Node]bool)
 var topCall = true
 var printAddr = flag.Bool("print_expr_addr", false,
-	"Print address of expression nodes.")
+	"Print address of expression Nodes.")
 var ShowSharing = flag.Bool("show_expr_sharing", false,
-	"Print address of expression nodes.")
+	"Print address of expression Nodes.")
 
 func (n *Node) String() string {
 	if *ShowSharing {
@@ -152,17 +152,17 @@ func (n *Node) String() string {
 		}
 	case Cons:
 		{
-			if len(n.nodes) != 2 {
-				return fmt.Sprintf("<Corrupted CONS: %v node(s)>", len(n.nodes))
+			if len(n.Nodes) != 2 {
+				return fmt.Sprintf("<Corrupted CONS: %v node(s)>", len(n.Nodes))
 			} else {
-				return fmt.Sprintf("[ %v :: %v ]", n.nodes[0], n.nodes[1])
+				return fmt.Sprintf("[ %v :: %v ]", n.Nodes[0], n.Nodes[1])
 			}
 		}
 	case Closure:
 		{
 			//log.Printf("Printing closure with function '%v'", n.funName)
 			var args []string
-			for _, node := range n.nodes {
+			for _, node := range n.Nodes {
 				args = append(args, fmt.Sprint(node))
 			}
 			if *printAddr {
@@ -173,13 +173,13 @@ func (n *Node) String() string {
 		}
 	case Ap:
 		{
-			if len(n.nodes) != 1 {
-				return fmt.Sprintf("<Corrupted AP: %v node(s)>", len(n.nodes))
+			if len(n.Nodes) != 1 {
+				return fmt.Sprintf("<Corrupted AP: %v node(s)>", len(n.Nodes))
 			} else {
 				if *printAddr {
-					return fmt.Sprintf("%p|(%v %v)", n, n.fun, n.nodes[0])
+					return fmt.Sprintf("%p|(%v %v)", n, n.fun, n.Nodes[0])
 				} else {
-					return fmt.Sprintf("(%v %v)", n.fun, n.nodes[0])
+					return fmt.Sprintf("(%v %v)", n.fun, n.Nodes[0])
 				}
 			}
 		}
@@ -202,7 +202,7 @@ func (n *Node) NodeCount() int {
 		if node.fun != nil && !visited[node.fun] {
 			queue = append(queue, node.fun)
 		}
-		for _, child := range node.nodes {
+		for _, child := range node.Nodes {
 			if !visited[child] {
 				queue = append(queue, child)
 			}
@@ -230,7 +230,7 @@ func (p *Parser) ParseAp(tokens []string, pos int) (*Node, []string, error) {
 		if arg, rem2, err := p.ParseExp(rem1, pos+(len(tokens)-len(rem1))); err != nil {
 			return nil, rem2, err
 		} else {
-			node.nodes = append(node.nodes, arg)
+			node.Nodes = append(node.Nodes, arg)
 			return node, rem2, nil
 		}
 	}
@@ -373,13 +373,49 @@ func modulate(num int64) string {
 		bytes = append(bytes, []byte("10")...)
 		num = -num
 	}
-	bitsNeeded := (64 - bits.LeadingZeros64(uint64(num)) + 3) / 4
-	bytes = append(bytes, []byte(strings.Repeat("1", bitsNeeded)+"0")...)
-	bytes = append(bytes, []byte(fmt.Sprintf("%0[1]*[2]b", bitsNeeded*4, num))...)
+	bits4Needed := (64 - bits.LeadingZeros64(uint64(num)) + 3) / 4
+	bytes = append(bytes, []byte(strings.Repeat("1", bits4Needed)+"0")...)
+	bytes = append(bytes, []byte(fmt.Sprintf("%0[1]*[2]b", bits4Needed*4, num))...)
 	return string(bytes)
 }
 
-func modulateList(n *Node, bytes []byte) ([]byte, error) {
+func demodulate(bytes []byte) (int64, []byte) {
+	if len(bytes) < 3 {
+		return 0, nil
+	}
+	pfx := string(bytes[:2])
+	sign := int64(1)
+	if pfx == "10" {
+		sign = -1
+	}
+	bytes = bytes[2:]
+	bits4Used := 0
+	for len(bytes) > 0 {
+		if bytes[0] == byte('1') {
+			bits4Used += 1
+			bytes = bytes[1:]
+		} else {
+			bytes = bytes[1:]
+			break
+		}
+	}
+	if bits4Used == 0 {
+		return 0, bytes
+	}
+	numStr := bytes[:4*bits4Used]
+	bytes = bytes[4*bits4Used:]
+	if num, err := strconv.ParseInt(string(numStr), 2, 64); err != nil {
+		return 0, nil
+	} else {
+		return num * sign, bytes
+	}
+}
+
+//func DemodulateList(bytes []byte) (*Node, error) {
+//	return nil, nil
+//}
+
+func ModulateList(n *Node, bytes []byte) ([]byte, error) {
 	if n == nil {
 		return nil, errors.New(fmt.Sprintf("can't modulate <nil>"))
 	}
@@ -394,31 +430,31 @@ func modulateList(n *Node, bytes []byte) ([]byte, error) {
 	}
 	bytes = append(bytes, []byte("11")...)
 	var err error
-	bytes, err = modulateList(n.nodes[0], bytes)
+	bytes, err = ModulateList(n.Nodes[0], bytes)
 	if err != nil {
 		return nil, err
 	}
-	return modulateList(n.nodes[1], bytes)
+	return ModulateList(n.Nodes[1], bytes)
 }
 
 func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	if n.fun.nodeType != Fun {
 		return nil, errors.New(fmt.Sprintf("expected function node: %v", n))
 	}
-	if len(n.nodes) != 1 {
+	if len(n.Nodes) != 1 {
 		return nil, errors.New(fmt.Sprintf("function node expects exactly one arg: %v", n))
 	}
 	switch n.fun.funName {
 	case "f": // First argument ignored.
-		n.nodes[0] = &Node{nodeType: Fun, funName: "_"}
-	case "if0", "mod", "neg", "inc", "dec", "isnil", "car", "cdr", "double":
+		n.Nodes[0] = &Node{nodeType: Fun, funName: "_"}
+	case "if0", "mod", "dem", "neg", "inc", "dec", "isnil", "car", "cdr", "double":
 		// Functions strict in first argument.
 		for {
-			if arg, err := r.Reduce(n.nodes[0]); err != nil {
+			if arg, err := r.Reduce(n.Nodes[0]); err != nil {
 				return nil, err
 			} else {
-				if n.nodes[0] != arg {
-					n.nodes[0] = arg
+				if n.Nodes[0] != arg {
+					n.Nodes[0] = arg
 					r.RecordStep()
 				} else {
 					break
@@ -426,7 +462,7 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 			}
 		}
 	case "modlist":
-		if _, err := r.EagerReduce(&n.nodes[0]); err != nil {
+		if _, err := r.EagerReduce(&n.Nodes[0]); err != nil {
 			return nil, err
 		}
 	}
@@ -434,47 +470,50 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	case "nil":
 		return &Node{nodeType: Fun, funName: "t"}, nil
 	case "modlist":
-		if n.nodes[0].nodeType != Cons && n.nodes[0].funName != "nil" {
+		if n.Nodes[0].nodeType != Cons && n.Nodes[0].funName != "nil" {
 			return nil, errors.New(fmt.Sprintf("expected list argument: %v", n))
 		}
 		var bytes []byte
-		bytes, err := modulateList(n.nodes[0], bytes)
+		bytes, err := ModulateList(n.Nodes[0], bytes)
 		if err != nil {
 			return nil, errors.New(fmt.Sprintf("failed to modulate list: %v, error: %v", n, err))
 		}
 		return &Node{nodeType: Num, modulated: string(bytes)}, nil
-	case "neg", "inc", "dec", "mod":
-		if n.nodes[0].nodeType != Num {
+	case "neg", "inc", "dec", "mod", "dem":
+		if n.Nodes[0].nodeType != Num {
 			return nil, errors.New(fmt.Sprintf("expected single numeric argument: %v", n))
 		} else {
 			switch n.fun.funName {
 			case "neg":
-				return &Node{nodeType: Num, num: -n.nodes[0].num}, nil
+				return &Node{nodeType: Num, num: -n.Nodes[0].num}, nil
 			case "inc":
-				return &Node{nodeType: Num, num: n.nodes[0].num + 1}, nil
+				return &Node{nodeType: Num, num: n.Nodes[0].num + 1}, nil
 			case "dec":
-				return &Node{nodeType: Num, num: n.nodes[0].num - 1}, nil
+				return &Node{nodeType: Num, num: n.Nodes[0].num - 1}, nil
 			case "mod":
-				return &Node{nodeType: Num, num: n.nodes[0].num, modulated: modulate(n.nodes[0].num)}, nil
+				return &Node{nodeType: Num, num: n.Nodes[0].num, modulated: modulate(n.Nodes[0].num)}, nil
+			case "dem":
+				num, _ := demodulate([]byte(n.Nodes[0].modulated))
+				return &Node{nodeType: Num, num: num}, nil
 			}
 		}
 	case "isnil":
-		if n.nodes[0].funName == "nil" {
+		if n.Nodes[0].funName == "nil" {
 			return &Node{nodeType: Fun, funName: "t"}, nil
 		} else {
 			return &Node{nodeType: Fun, funName: "f"}, nil
 		}
 	case "car":
-		if n.nodes[0].nodeType != Cons {
+		if n.Nodes[0].nodeType != Cons {
 			return nil, errors.New(fmt.Sprintf("'car' expects CONS: %v", n))
 		} else {
-			return n.nodes[0].nodes[0], nil
+			return n.Nodes[0].Nodes[0], nil
 		}
 	case "cdr":
-		if n.nodes[0].nodeType != Cons {
+		if n.Nodes[0].nodeType != Cons {
 			return nil, errors.New(fmt.Sprintf("'cdr' expects CONS: %v", n))
 		} else {
-			return n.nodes[0].nodes[1], nil
+			return n.Nodes[0].Nodes[1], nil
 		}
 	case "cons", "mul", "div", "add", "eq", "lt", "t", "f":
 		{
@@ -484,15 +523,15 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 			} else {
 				node = &Node{nodeType: Closure, funName: n.fun.funName}
 			}
-			node.nodes = append(node.nodes, n.nodes[0])
+			node.Nodes = append(node.Nodes, n.Nodes[0])
 			var varName string
 			if n.fun.funName == "t" {
 				// Second argument is ignored.
 				varName = "_"
-				node.nodes = append(node.nodes, &Node{nodeType: Ref, funName: "_"})
+				node.Nodes = append(node.Nodes, &Node{nodeType: Ref, funName: "_"})
 			} else {
 				varName = r.newVarName()
-				node.nodes = append(node.nodes, &Node{nodeType: Ref, funName: varName})
+				node.Nodes = append(node.Nodes, &Node{nodeType: Ref, funName: varName})
 			}
 			return &Node{nodeType: Lambda, fun: node, bound: varName}, nil
 		}
@@ -500,33 +539,33 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	case "double":
 		{
 			varName := r.newVarName()
-			node := &Node{nodeType: Ap, fun: n.nodes[0], nodes: []*Node{{nodeType: Ap, fun: n.nodes[0]}}}
-			node.nodes[0].nodes = append(node.nodes[0].nodes, &Node{nodeType: Ref, funName: varName})
+			node := &Node{nodeType: Ap, fun: n.Nodes[0], Nodes: []*Node{{nodeType: Ap, fun: n.Nodes[0]}}}
+			node.Nodes[0].Nodes = append(node.Nodes[0].Nodes, &Node{nodeType: Ref, funName: varName})
 			return &Node{nodeType: Lambda, fun: node, bound: varName}, nil
 		}
 	case "s", "c", "b", "if0":
 		{
 			closure := &Node{nodeType: Closure, funName: n.fun.funName}
-			closure.nodes = append(closure.nodes, n.nodes[0])
+			closure.Nodes = append(closure.Nodes, n.Nodes[0])
 			firstArg := r.newVarName()
 			secondArg := r.newVarName()
 			if n.fun.funName == "if0" {
-				if n.nodes[0].nodeType != Num {
+				if n.Nodes[0].nodeType != Num {
 					return nil, errors.New(fmt.Sprintf("'if0' expects numeric first argument: %v", n))
 				}
-				if n.nodes[0].num == 0 {
+				if n.Nodes[0].num == 0 {
 					secondArg = "_"
 				} else {
 					firstArg = "_"
 				}
 			}
-			closure.nodes = append(closure.nodes, &Node{nodeType: Ref, funName: firstArg})
-			closure.nodes = append(closure.nodes, &Node{nodeType: Ref, funName: secondArg})
+			closure.Nodes = append(closure.Nodes, &Node{nodeType: Ref, funName: firstArg})
+			closure.Nodes = append(closure.Nodes, &Node{nodeType: Ref, funName: secondArg})
 			return &Node{nodeType: Lambda, fun: &Node{nodeType: Lambda, fun: closure, bound: secondArg},
 				bound: firstArg}, nil
 		}
 	case "i":
-		return n.nodes[0], nil
+		return n.Nodes[0], nil
 	default:
 		return nil, errors.New(fmt.Sprintf("unimplemented function: %v", n))
 	}
@@ -560,9 +599,9 @@ func (r *Reducer) EagerReduce(root **Node) (*Node, error) {
 	steps := 0
 	//r.PrintSteps = true
 	if (*root).nodeType == Cons {
-		queue := []**Node{&(*root).nodes[0], &(*root).nodes[1]}
-		//log.Printf("\n====Adding to queue (head): %v\n", r.Root.nodes[0])
-		//log.Printf("\n====Adding to queue (tail): %v\n", r.Root.nodes[1])
+		queue := []**Node{&(*root).Nodes[0], &(*root).Nodes[1]}
+		//log.Printf("\n====Adding to queue (head): %v\n", r.Root.Nodes[0])
+		//log.Printf("\n====Adding to queue (tail): %v\n", r.Root.Nodes[1])
 		for len(queue) > 0 {
 			steps += 1
 			if steps > maxSteps {
@@ -587,10 +626,10 @@ func (r *Reducer) EagerReduce(root **Node) (*Node, error) {
 				}
 			}
 			if (*node).nodeType == Cons {
-				queue = append(queue, &(*node).nodes[0])
-				queue = append(queue, &(*node).nodes[1])
-				//log.Printf("\n====Adding to queue (head): %v\n", (*node).nodes[0])
-				//log.Printf("\n====Adding to queue (tail): %v\n", (*node).nodes[1])
+				queue = append(queue, &(*node).Nodes[0])
+				queue = append(queue, &(*node).Nodes[1])
+				//log.Printf("\n====Adding to queue (head): %v\n", (*node).Nodes[0])
+				//log.Printf("\n====Adding to queue (tail): %v\n", (*node).Nodes[1])
 				//log.Printf("\n====Queue length: %v\n", len(queue))
 			}
 		}
@@ -600,59 +639,6 @@ func (r *Reducer) EagerReduce(root **Node) (*Node, error) {
 
 func (r *Reducer) ReduceRoot() (*Node, error) {
 	return r.EagerReduce(&r.Root)
-	//for !isTerminal(r.Root.nodeType) {
-	//	node, err := r.Reduce(r.Root)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	if r.Root != node {
-	//		r.Root = node
-	//		r.RecordStep()
-	//	} else {
-	//		break
-	//	}
-	//}
-	//// Make lists strict.
-	//maxSteps := 200000
-	//steps := 0
-	////r.PrintSteps = true
-	//if r.Root.nodeType == Cons {
-	//	queue := []**Node{&r.Root.nodes[0], &r.Root.nodes[1]}
-	//	//log.Printf("\n====Adding to queue (head): %v\n", r.Root.nodes[0])
-	//	//log.Printf("\n====Adding to queue (tail): %v\n", r.Root.nodes[1])
-	//	for len(queue) > 0 {
-	//		steps += 1
-	//		if steps > maxSteps {
-	//			break
-	//		}
-	//		node := queue[0]
-	//		queue = queue[1:]
-	//		//log.Printf("============ Reducing to terminal state: %v", *node)
-	//		if len(queue) == 7 && (*node).funName == "b" {
-	//			//r.PrintSteps = true
-	//		}
-	//		for !isTerminal((*node).nodeType) {
-	//			reduced, err := r.Reduce(*node)
-	//			if err != nil {
-	//				return nil, err
-	//			}
-	//			if *node != reduced {
-	//				*node = reduced
-	//				r.RecordStep()
-	//			} else {
-	//				break
-	//			}
-	//		}
-	//		if (*node).nodeType == Cons {
-	//			queue = append(queue, &(*node).nodes[0])
-	//			queue = append(queue, &(*node).nodes[1])
-	//			//log.Printf("\n====Adding to queue (head): %v\n", (*node).nodes[0])
-	//			//log.Printf("\n====Adding to queue (tail): %v\n", (*node).nodes[1])
-	//			//log.Printf("\n====Queue length: %v\n", len(queue))
-	//		}
-	//	}
-	//}
-	//return r.Root, nil
 }
 
 func (r *Reducer) Reduce(n *Node) (*Node, error) {
@@ -664,7 +650,7 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 	if r.MaxStepCount > 0 && r.stepCount > r.MaxStepCount {
 		return nil, errors.New(fmt.Sprintf("Reached max step count: %v", r.MaxStepCount))
 	}
-	if r.stepCount%5000 == 0 {
+	if r.stepCount%1000000 == 0 {
 		log.Printf("Step: %v  Node Count: %v", r.stepCount, r.Root.NodeCount())
 	}
 	switch n.nodeType {
@@ -682,19 +668,19 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 	case Num, Fun, Lambda:
 		return n, nil
 	case Cons:
-		if head, err := r.Reduce(n.nodes[0]); err != nil {
+		if head, err := r.Reduce(n.Nodes[0]); err != nil {
 			return nil, err
 		} else {
-			if n.nodes[0] != head {
-				n.nodes[0] = head
+			if n.Nodes[0] != head {
+				n.Nodes[0] = head
 				r.RecordStep()
 			}
 		}
-		if tail, err := r.Reduce(n.nodes[1]); err != nil {
+		if tail, err := r.Reduce(n.Nodes[1]); err != nil {
 			return nil, err
 		} else {
-			if n.nodes[1] != tail {
-				n.nodes[1] = tail
+			if n.Nodes[1] != tail {
+				n.Nodes[1] = tail
 				r.RecordStep()
 			}
 		}
@@ -705,8 +691,8 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 			return nil, errors.New(fmt.Sprintf("fun is nil: %v", n))
 		case n.fun.nodeType == Cons:
 			// log.Printf("applying cons")
-			node := &Node{nodeType: Ap, fun: &Node{nodeType: Ap, fun: n.nodes[0], nodes: []*Node{n.fun.nodes[0]}},
-				nodes: []*Node{n.fun.nodes[1]}}
+			node := &Node{nodeType: Ap, fun: &Node{nodeType: Ap, fun: n.Nodes[0], Nodes: []*Node{n.fun.Nodes[0]}},
+				Nodes: []*Node{n.fun.Nodes[1]}}
 			return node, nil
 		case n.fun.nodeType == Ap || n.fun.nodeType == Ref || n.fun.nodeType == Closure:
 			if fun, err := r.Reduce(n.fun); err != nil {
@@ -724,15 +710,15 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 				if n.fun.bound == "" {
 					return nil, errors.New(fmt.Sprintf("no bound variable: %v", n))
 				}
-				if len(n.nodes) != 1 {
+				if len(n.Nodes) != 1 {
 					return nil, errors.New(fmt.Sprintf("lambda expects exactly one arg: %v", n))
 				}
 				instantiated := n.fun.fun
 				// Only use the argument if it's not discarded.
 				if n.fun.bound != "_" {
-					instantiated = n.fun.fun.Instantiate(n.fun.bound, n.nodes[0])
+					instantiated = n.fun.fun.Instantiate(n.fun.bound, n.Nodes[0])
 				}
-				n.nodes[0] = instantiated
+				n.Nodes[0] = instantiated
 				n.fun = &Node{nodeType: Fun, funName: "i"}
 				r.RecordStep()
 				return r.Reduce(n)
@@ -745,7 +731,7 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 			switch n.funName {
 			case "add", "mul", "div", "eq", "lt":
 				{
-					for pos, node := range n.nodes {
+					for pos, node := range n.Nodes {
 						if node.nodeType == Num {
 							continue
 						}
@@ -753,9 +739,9 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 							if arg, err := r.Reduce(node); err != nil {
 								return nil, err
 							} else {
-								if n.nodes[pos] != arg {
+								if n.Nodes[pos] != arg {
 									node = arg
-									n.nodes[pos] = arg
+									n.Nodes[pos] = arg
 									r.RecordStep()
 								} else {
 									break
@@ -763,24 +749,24 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 							}
 						}
 					}
-					if n.nodes[0].nodeType != Num || n.nodes[1].nodeType != Num {
+					if n.Nodes[0].nodeType != Num || n.Nodes[1].nodeType != Num {
 						return nil, errors.New(fmt.Sprintf("expected two numeric arguments: %v", n))
 					}
 					switch n.funName {
 					case "add":
-						return &Node{nodeType: Num, num: n.nodes[0].num + n.nodes[1].num}, nil
+						return &Node{nodeType: Num, num: n.Nodes[0].num + n.Nodes[1].num}, nil
 					case "mul":
-						return &Node{nodeType: Num, num: n.nodes[0].num * n.nodes[1].num}, nil
+						return &Node{nodeType: Num, num: n.Nodes[0].num * n.Nodes[1].num}, nil
 					case "div":
-						return &Node{nodeType: Num, num: n.nodes[0].num / n.nodes[1].num}, nil
+						return &Node{nodeType: Num, num: n.Nodes[0].num / n.Nodes[1].num}, nil
 					case "eq":
-						if n.nodes[0].num == n.nodes[1].num {
+						if n.Nodes[0].num == n.Nodes[1].num {
 							return &Node{nodeType: Fun, funName: "t"}, nil
 						} else {
 							return &Node{nodeType: Fun, funName: "f"}, nil
 						}
 					case "lt":
-						if n.nodes[0].num < n.nodes[1].num {
+						if n.Nodes[0].num < n.Nodes[1].num {
 							return &Node{nodeType: Fun, funName: "t"}, nil
 						} else {
 							return &Node{nodeType: Fun, funName: "f"}, nil
@@ -788,24 +774,24 @@ func (r *Reducer) Reduce(n *Node) (*Node, error) {
 					}
 				}
 			case "if0":
-				if n.nodes[0].num == 0 {
-					return n.nodes[1], nil
+				if n.Nodes[0].num == 0 {
+					return n.Nodes[1], nil
 				} else {
-					return n.nodes[2], nil
+					return n.Nodes[2], nil
 				}
 			case "t":
-				return n.nodes[0], nil
+				return n.Nodes[0], nil
 			case "f":
-				return n.nodes[1], nil
+				return n.Nodes[1], nil
 			case "s":
-				return &Node{nodeType: Ap, fun: &Node{nodeType: Ap, fun: n.nodes[0], nodes: []*Node{n.nodes[2]}},
-					nodes: []*Node{{nodeType: Ap, fun: n.nodes[1], nodes: []*Node{n.nodes[2]}}}}, nil
+				return &Node{nodeType: Ap, fun: &Node{nodeType: Ap, fun: n.Nodes[0], Nodes: []*Node{n.Nodes[2]}},
+					Nodes: []*Node{{nodeType: Ap, fun: n.Nodes[1], Nodes: []*Node{n.Nodes[2]}}}}, nil
 			case "c":
-				return &Node{nodeType: Ap, fun: &Node{nodeType: Ap, fun: n.nodes[0], nodes: []*Node{n.nodes[2]}},
-					nodes: []*Node{n.nodes[1]}}, nil
+				return &Node{nodeType: Ap, fun: &Node{nodeType: Ap, fun: n.Nodes[0], Nodes: []*Node{n.Nodes[2]}},
+					Nodes: []*Node{n.Nodes[1]}}, nil
 			case "b":
-				return &Node{nodeType: Ap, fun: n.nodes[0],
-					nodes: []*Node{{nodeType: Ap, fun: n.nodes[1], nodes: []*Node{n.nodes[2]}}}}, nil
+				return &Node{nodeType: Ap, fun: n.Nodes[0],
+					Nodes: []*Node{{nodeType: Ap, fun: n.Nodes[1], Nodes: []*Node{n.Nodes[2]}}}}, nil
 			}
 		}
 	}

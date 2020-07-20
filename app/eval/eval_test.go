@@ -19,15 +19,15 @@ func TestInstantiate(t *testing.T) {
 		{&Node{nodeType: Ref, funName: "X0"}, "X1", &Node{nodeType: Num, num: 7}, "X0"},
 		// Test 2
 		{&Node{nodeType: Ap, fun: &Node{nodeType: Fun, funName: "neg"},
-			nodes: []*Node{{nodeType: Ref, funName: "X0"}}},
+			Nodes: []*Node{{nodeType: Ref, funName: "X0"}}},
 			"X0", &Node{nodeType: Num, num: 7}, "(neg 7)"},
 		// Test 3
 		{&Node{nodeType: Closure, funName: "add",
-			nodes: []*Node{{nodeType: Num, num: 8}, {nodeType: Ref, funName: "X0"}}},
+			Nodes: []*Node{{nodeType: Num, num: 8}, {nodeType: Ref, funName: "X0"}}},
 			"X0", &Node{nodeType: Num, num: 7}, "add(8, 7)"},
 		// Test 4
 		{&Node{nodeType: Ap, fun: &Node{nodeType: Ref, funName: "X0"},
-			nodes: []*Node{{nodeType: Num, num: 8}}},
+			Nodes: []*Node{{nodeType: Num, num: 8}}},
 			"X0", &Node{nodeType: Fun, funName: "inc"}, "(inc 8)"},
 	}
 	for testId, test := range tests {
@@ -41,7 +41,7 @@ func TestInstantiate(t *testing.T) {
 				t.Errorf("Test %v:\n%v", testId, test.node)
 				t.Errorf("Test %v: Failed to clone top node.", testId)
 			}
-			if test.node.nodes[0] != clone.nodes[0] {
+			if test.node.Nodes[0] != clone.Nodes[0] {
 				t.Fail()
 				t.Errorf("Test %v:\n%v", testId, test.node)
 				t.Errorf("Test %v: Failed to retain unaffected branch.", testId)
@@ -216,6 +216,20 @@ func TestEval(t *testing.T) {
 		{":1 = ap ap cons 1 ap ap cons 2 nil\n:2 = ap modlist ap ap cons 1 ap ap cons :1 ap ap cons 4 nil",
 			true,
 			"1101100001111101100001110110001000110110010000"},
+		// Test 46
+		{":1 = ap dem ap mod 0", true, "0"},
+		// Test 47
+		{":1 = ap dem ap mod 1", true, "1"},
+		// Test 48
+		{":1 = ap dem ap mod -1", true, "-1"},
+		// Test 49
+		{":1 = ap dem ap mod -15", true, "-15"},
+		// Test 50
+		{":1 = ap dem ap mod 16", true, "16"},
+		// Test 51
+		{":1 = ap dem ap mod -255", true, "-255"},
+		// Test 52
+		{":1 = ap dem ap mod 256", true, "256"},
 	}
 	for testId, test := range tests {
 		//if testId != 32 {
