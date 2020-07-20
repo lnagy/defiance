@@ -187,6 +187,20 @@ func TestEval(t *testing.T) {
 		{":1 = ap dec 7\n:2 = ap ap add ap inc :1 ap dec :1", true, "12"},
 		// Test 32
 		{":1 = ap ap double ap add 1 2", true, "4"},
+		// Test 33
+		{":1 = ap mod 0", true, "010"},
+		// Test 34
+		{":1 = ap mod 1", true, "01100001"},
+		// Test 35
+		{":1 = ap mod -1", true, "10100001"},
+		// Test 36
+		{":1 = ap mod -15", true, "10101111"},
+		// Test 37
+		{":1 = ap mod 16", true, "0111000010000"},
+		// Test 38
+		{":1 = ap mod -255", true, "1011011111111"},
+		// Test 39
+		{":1 = ap mod 256", true, "011110000100000000"},
 	}
 	for testId, test := range tests {
 		//if testId != 32 {

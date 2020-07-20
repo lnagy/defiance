@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/bits"
 	"os"
 	"strconv"
 	"strings"
@@ -23,12 +24,13 @@ const (
 )
 
 type Node struct {
-	fun      *Node
-	nodes    []*Node
-	nodeType NodeType
-	funName  string
-	num      int64
-	bound    string // Lambda-bound reference.
+	fun       *Node
+	nodes     []*Node
+	nodeType  NodeType
+	funName   string
+	num       int64
+	bound     string // Lambda-bound reference.
+	modulated string // 0s and 1s
 }
 
 func (n *Node) Clone() *Node {
@@ -130,6 +132,9 @@ func (n *Node) String() string {
 	}
 	if n == nil {
 		return "<nil>"
+	}
+	if n.modulated != "" {
+		return n.modulated
 	}
 	switch n.nodeType {
 	case Ref:
@@ -357,6 +362,23 @@ func (r *Reducer) newVarName() string {
 	return varName
 }
 
+func modulate(num int64) string {
+	var bytes []byte
+	if num == 0 {
+		return "010"
+	}
+	if num > 0 {
+		bytes = append(bytes, []byte("01")...)
+	} else {
+		bytes = append(bytes, []byte("10")...)
+		num = -num
+	}
+	bitsNeeded := (64 - bits.LeadingZeros64(uint64(num)) + 3) / 4
+	bytes = append(bytes, []byte(strings.Repeat("1", bitsNeeded)+"0")...)
+	bytes = append(bytes, []byte(fmt.Sprintf("%0[1]*[2]b", bitsNeeded*4, num))...)
+	return string(bytes)
+}
+
 func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	if n.fun.nodeType != Fun {
 		return nil, errors.New(fmt.Sprintf("expected function node: %v", n))
@@ -367,7 +389,7 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	switch n.fun.funName {
 	case "f": // First argument ignored.
 		n.nodes[0] = &Node{nodeType: Fun, funName: "_"}
-	case "if0", "neg", "inc", "dec", "isnil", "car", "cdr", "double":
+	case "if0", "mod", "neg", "inc", "dec", "isnil", "car", "cdr", "double":
 		// Functions strict in first argument.
 		for {
 			if arg, err := r.Reduce(n.nodes[0]); err != nil {
@@ -385,7 +407,7 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	switch n.fun.funName {
 	case "nil":
 		return &Node{nodeType: Fun, funName: "t"}, nil
-	case "neg", "inc", "dec":
+	case "neg", "inc", "dec", "mod":
 		if n.nodes[0].nodeType != Num {
 			return nil, errors.New(fmt.Sprintf("expected single numeric argument: %v", n))
 		} else {
@@ -396,6 +418,8 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 				return &Node{nodeType: Num, num: n.nodes[0].num + 1}, nil
 			case "dec":
 				return &Node{nodeType: Num, num: n.nodes[0].num - 1}, nil
+			case "mod":
+				return &Node{nodeType: Num, num: n.nodes[0].num, modulated: modulate(n.nodes[0].num)}, nil
 			}
 		}
 	case "isnil":
