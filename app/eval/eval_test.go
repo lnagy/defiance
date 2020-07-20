@@ -230,6 +230,20 @@ func TestEval(t *testing.T) {
 		{":1 = ap dem ap mod -255", true, "-255"},
 		// Test 52
 		{":1 = ap dem ap mod 256", true, "256"},
+		{":1 = ap demlist ap modlist nil", true, "nil"},
+		// Test 53
+		{":1 = ap demlist ap modlist ap ap cons nil nil", true, "[ nil :: nil ]"},
+		// Test 54
+		{":1 = ap demlist ap modlist ap ap cons 0 nil", true, "[ 0 :: nil ]"},
+		// Test 55
+		{":1 = ap demlist ap modlist ap ap cons 1 2", true, "[ 1 :: 2 ]"},
+		// Test 56
+		{":1 = ap demlist ap modlist ap ap cons 1 ap ap cons 2 nil", true,
+			"[ 1 :: [ 2 :: nil ] ]"},
+		// Test 57
+		{":1 = ap ap cons 1 ap ap cons 2 nil\n:2 = ap demlist ap modlist ap ap cons 1 ap ap cons :1 ap ap cons 4 nil",
+			true,
+			"[ 1 :: [ [ 1 :: [ 2 :: nil ] ] :: [ 4 :: nil ] ] ]"},
 	}
 	for testId, test := range tests {
 		//if testId != 32 {

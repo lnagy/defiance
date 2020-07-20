@@ -411,9 +411,29 @@ func demodulate(bytes []byte) (int64, []byte) {
 	}
 }
 
-//func DemodulateList(bytes []byte) (*Node, error) {
-//	return nil, nil
-//}
+func DemodulateList(bytes []byte) (*Node, []byte, error) {
+	if len(bytes) == 0 {
+		return nil, nil, errors.New("nothing to demodulate")
+	}
+	pfx := string(bytes[:2])
+	if pfx == "00" {
+		return &Node{nodeType: Fun, funName: "nil"}, bytes[2:], nil
+	}
+	if pfx == "01" || pfx == "10" {
+		var num int64
+		num, bytes = demodulate(bytes)
+		return &Node{nodeType: Num, num: num}, bytes, nil
+	}
+	head, bytes, err := DemodulateList(bytes[2:])
+	if err != nil {
+		return nil, bytes, err
+	}
+	tail, bytes, err := DemodulateList(bytes)
+	if err != nil {
+		return nil, bytes, err
+	}
+	return &Node{nodeType: Cons, Nodes: []*Node{head, tail}}, bytes, nil
+}
 
 func ModulateList(n *Node, bytes []byte) ([]byte, error) {
 	if n == nil {
@@ -447,7 +467,7 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	switch n.fun.funName {
 	case "f": // First argument ignored.
 		n.Nodes[0] = &Node{nodeType: Fun, funName: "_"}
-	case "if0", "mod", "dem", "neg", "inc", "dec", "isnil", "car", "cdr", "double":
+	case "if0", "mod", "dem", "demlist", "neg", "inc", "dec", "isnil", "car", "cdr", "double":
 		// Functions strict in first argument.
 		for {
 			if arg, err := r.Reduce(n.Nodes[0]); err != nil {
@@ -479,6 +499,15 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 			return nil, errors.New(fmt.Sprintf("failed to modulate list: %v, error: %v", n, err))
 		}
 		return &Node{nodeType: Num, modulated: string(bytes)}, nil
+	case "demlist":
+		if n.Nodes[0].nodeType != Num || n.Nodes[0].modulated == "" {
+			return nil, errors.New(fmt.Sprintf("expected modulated list argument: %v", n))
+		}
+		list, _, err := DemodulateList([]byte(n.Nodes[0].modulated))
+		if err != nil {
+			return nil, errors.New(fmt.Sprintf("failed to demodulate list: %v, error: %v", n, err))
+		}
+		return list, nil
 	case "neg", "inc", "dec", "mod", "dem":
 		if n.Nodes[0].nodeType != Num {
 			return nil, errors.New(fmt.Sprintf("expected single numeric argument: %v", n))
