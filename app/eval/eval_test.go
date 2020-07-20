@@ -201,6 +201,21 @@ func TestEval(t *testing.T) {
 		{":1 = ap mod -255", true, "1011011111111"},
 		// Test 39
 		{":1 = ap mod 256", true, "011110000100000000"},
+		// Test 40
+		{":1 = ap modlist nil", true, "00"},
+		// Test 41
+		{":1 = ap modlist ap ap cons nil nil", true, "110000"},
+		// Test 42
+		{":1 = ap modlist ap ap cons 0 nil", true, "1101000"},
+		// Test 43
+		{":1 = ap modlist ap ap cons 1 2", true, "110110000101100010"},
+		// Test 44
+		{":1 = ap modlist ap ap cons 1 ap ap cons 2 nil", true,
+			"1101100001110110001000"},
+		// Test 45
+		{":1 = ap ap cons 1 ap ap cons 2 nil\n:2 = ap modlist ap ap cons 1 ap ap cons :1 ap ap cons 4 nil",
+			true,
+			"1101100001111101100001110110001000110110010000"},
 	}
 	for testId, test := range tests {
 		//if testId != 32 {

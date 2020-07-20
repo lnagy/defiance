@@ -379,6 +379,28 @@ func modulate(num int64) string {
 	return string(bytes)
 }
 
+func modulateList(n *Node, bytes []byte) ([]byte, error) {
+	if n == nil {
+		return nil, errors.New(fmt.Sprintf("can't modulate <nil>"))
+	}
+	if n.funName == "nil" {
+		return append(bytes, []byte("00")...), nil
+	}
+	if n.nodeType == Num {
+		return append(bytes, []byte(modulate(n.num))...), nil
+	}
+	if n.nodeType != Cons {
+		return nil, errors.New(fmt.Sprintf("expected Cons: %v", n))
+	}
+	bytes = append(bytes, []byte("11")...)
+	var err error
+	bytes, err = modulateList(n.nodes[0], bytes)
+	if err != nil {
+		return nil, err
+	}
+	return modulateList(n.nodes[1], bytes)
+}
+
 func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 	if n.fun.nodeType != Fun {
 		return nil, errors.New(fmt.Sprintf("expected function node: %v", n))
@@ -403,10 +425,24 @@ func (r *Reducer) ReduceFunction(n *Node) (*Node, error) {
 				}
 			}
 		}
+	case "modlist":
+		if _, err := r.EagerReduce(&n.nodes[0]); err != nil {
+			return nil, err
+		}
 	}
 	switch n.fun.funName {
 	case "nil":
 		return &Node{nodeType: Fun, funName: "t"}, nil
+	case "modlist":
+		if n.nodes[0].nodeType != Cons && n.nodes[0].funName != "nil" {
+			return nil, errors.New(fmt.Sprintf("expected list argument: %v", n))
+		}
+		var bytes []byte
+		bytes, err := modulateList(n.nodes[0], bytes)
+		if err != nil {
+			return nil, errors.New(fmt.Sprintf("failed to modulate list: %v, error: %v", n, err))
+		}
+		return &Node{nodeType: Num, modulated: string(bytes)}, nil
 	case "neg", "inc", "dec", "mod":
 		if n.nodes[0].nodeType != Num {
 			return nil, errors.New(fmt.Sprintf("expected single numeric argument: %v", n))
@@ -506,14 +542,14 @@ func isTerminal(nt NodeType) bool {
 	}
 }
 
-func (r *Reducer) ReduceRoot() (*Node, error) {
-	for !isTerminal(r.Root.nodeType) {
-		node, err := r.Reduce(r.Root)
+func (r *Reducer) EagerReduce(root **Node) (*Node, error) {
+	for !isTerminal((*root).nodeType) {
+		node, err := r.Reduce(*root)
 		if err != nil {
 			return nil, err
 		}
-		if r.Root != node {
-			r.Root = node
+		if *root != node {
+			*root = node
 			r.RecordStep()
 		} else {
 			break
@@ -523,8 +559,8 @@ func (r *Reducer) ReduceRoot() (*Node, error) {
 	maxSteps := 200000
 	steps := 0
 	//r.PrintSteps = true
-	if r.Root.nodeType == Cons {
-		queue := []**Node{&r.Root.nodes[0], &r.Root.nodes[1]}
+	if (*root).nodeType == Cons {
+		queue := []**Node{&(*root).nodes[0], &(*root).nodes[1]}
 		//log.Printf("\n====Adding to queue (head): %v\n", r.Root.nodes[0])
 		//log.Printf("\n====Adding to queue (tail): %v\n", r.Root.nodes[1])
 		for len(queue) > 0 {
@@ -559,7 +595,64 @@ func (r *Reducer) ReduceRoot() (*Node, error) {
 			}
 		}
 	}
-	return r.Root, nil
+	return *root, nil
+}
+
+func (r *Reducer) ReduceRoot() (*Node, error) {
+	return r.EagerReduce(&r.Root)
+	//for !isTerminal(r.Root.nodeType) {
+	//	node, err := r.Reduce(r.Root)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	if r.Root != node {
+	//		r.Root = node
+	//		r.RecordStep()
+	//	} else {
+	//		break
+	//	}
+	//}
+	//// Make lists strict.
+	//maxSteps := 200000
+	//steps := 0
+	////r.PrintSteps = true
+	//if r.Root.nodeType == Cons {
+	//	queue := []**Node{&r.Root.nodes[0], &r.Root.nodes[1]}
+	//	//log.Printf("\n====Adding to queue (head): %v\n", r.Root.nodes[0])
+	//	//log.Printf("\n====Adding to queue (tail): %v\n", r.Root.nodes[1])
+	//	for len(queue) > 0 {
+	//		steps += 1
+	//		if steps > maxSteps {
+	//			break
+	//		}
+	//		node := queue[0]
+	//		queue = queue[1:]
+	//		//log.Printf("============ Reducing to terminal state: %v", *node)
+	//		if len(queue) == 7 && (*node).funName == "b" {
+	//			//r.PrintSteps = true
+	//		}
+	//		for !isTerminal((*node).nodeType) {
+	//			reduced, err := r.Reduce(*node)
+	//			if err != nil {
+	//				return nil, err
+	//			}
+	//			if *node != reduced {
+	//				*node = reduced
+	//				r.RecordStep()
+	//			} else {
+	//				break
+	//			}
+	//		}
+	//		if (*node).nodeType == Cons {
+	//			queue = append(queue, &(*node).nodes[0])
+	//			queue = append(queue, &(*node).nodes[1])
+	//			//log.Printf("\n====Adding to queue (head): %v\n", (*node).nodes[0])
+	//			//log.Printf("\n====Adding to queue (tail): %v\n", (*node).nodes[1])
+	//			//log.Printf("\n====Queue length: %v\n", len(queue))
+	//		}
+	//	}
+	//}
+	//return r.Root, nil
 }
 
 func (r *Reducer) Reduce(n *Node) (*Node, error) {
